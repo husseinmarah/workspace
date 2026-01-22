@@ -189,8 +189,14 @@ services:
     networks:
       - workspace-network
     depends_on:
-      - authz-proxy
-      - minio
+      authz-proxy:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
 
   workspace-user2:
     image: workspace:latest
@@ -231,8 +237,15 @@ services:
     networks:
       - workspace-network
     depends_on:
-      - authz-proxy
-      - minio
+      authz-proxy:
+        condition: service_started
+      minio:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+      keycloak:
+        condition: service_healthy
+      
 
 volumes:
   postgres_data:
