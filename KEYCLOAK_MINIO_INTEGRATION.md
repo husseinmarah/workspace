@@ -16,7 +16,7 @@ User → Keycloak (auth) → JWT Token (with policy claim)
    HTTP API Access                         S3 API Access
 ```
 
-### Filesystem Integration (New!)
+### Filesystem Integration
 ```
 Workspace Container Startup
      ↓
@@ -32,7 +32,7 @@ Workspace Container Startup
    MinIO validates JWT token and applies Keycloak policies
      ↓
    Access granted/denied based on policy claim
-
+```
 ### Policy Enforcement Model (PEP + PDP)
 **PEP (Policy Enforcement Point)**
 - Implemented by the **AuthZ‑Proxy** for HTTP requests.
@@ -43,9 +43,8 @@ Workspace Container Startup
 - Implemented inside **AuthZ‑Proxy** logic and delegated to MinIO policy evaluation for S3 operations.
 - For HTTP access, the proxy evaluates the policy claim and roles against the requested path and action.
 - For S3 access, MinIO evaluates the JWT policy claim and applies bucket policies at request time.
-
+  
 **Key outcome:** PEP blocks/permits HTTP API access, while MinIO enforces S3 policy decisions even when access occurs through s3fs.
-```
 
 ### Components
 - **Keycloak**: IAM, user roles, JWT issuance, policy claim injection.
@@ -72,10 +71,7 @@ All services behind http://localhost with path routing:
 - /user1, /user2 → Workspaces
 
 ## 3) Policy Mapping Model
-
-```
 Keycloak Role → policy claim → MinIO policy → Bucket access
-```
 
 **Role → Policy mapping (recommended):**
 - admin → consoleAdmin + readwrite
@@ -223,7 +219,7 @@ lrwxrwxrwx 1 user1 user1 17 Jan 21 12:00 user1 -> /workspace/user1
 5. Navigate to Desktop → `common` folder
 6. Try creating a file → **Should succeed** (write access)
 
-### CPolicy enforcement** happens dynamically based on JWT token claims
+### C) **Policy enforcement** happens dynamically based on JWT token claims
 
 ### Key Benefits
 ✅ **No hardcoded permissions** - no `:ro` or `:rw` in docker-compose.yml  
@@ -398,7 +394,7 @@ python -c "import jwt, sys; token='$($response.access_token)'; print(jwt.decode(
 ### B) MinIO Console SSO
 1. Open http://localhost:9001
 2. Click **Login with SSO**
-3. Login as user1 / user1password
+3. Login as user1 / user1password (found in .env file)
 4. Verify access to `common` and own bucket only
 
 ### E) AuthZ‑Proxy flow
@@ -411,7 +407,7 @@ python scripts/test-authz.py --user user1 --password user1password --resource "/
 python scripts/test-keycloak-minio.py
 ```
 
-## 11) Changing User Access Policies
+## 10) Changing User Access Policies
 
 To change access for user1 or user2 to the common bucket, you have two options:
 
@@ -458,8 +454,8 @@ Modify 3 things in [keycloak/realm-export.json](keycloak/realm-export.json):
 ```
 
 ### Apply Changes (Option B)
+#### IMPORTANT: Must reset database volumes to reimport realm configuration
 ```bash
-# IMPORTANT: Must reset database volumes to reimport realm configuration
 docker compose -f compose.minio.keycloak.yml down -v
 docker compose -f compose.minio.keycloak.yml build
 docker compose -f compose.minio.keycloak.yml up -d
@@ -508,29 +504,35 @@ docker compose -f compose.minio.keycloak.yml up -d
 
 To ensure policy changes take effect across all layers:
 
-```bash
-# Option 1: Update via Keycloak UI (recommended)
-# 1. Update user attributes/roles in Keycloak Admin UI
-# 2. Force user re-authentication (logout + login)
-# 3. Restart workspace containers
-docker compose -f compose.minio.keycloak.yml restart workspace-user1 workspace-user2
 
-# Option 2: Update realm-export.json (development)
-# 1. Edit keycloak/realm-export.json
-# 2. Wipe all data and reimport
+### Option 1: Update via Keycloak UI (recommended)
+1. Update user attributes/roles in Keycloak Admin UI
+2. Force user re-authentication (logout + login)
+3. Restart workspace containers
+```bash
+docker compose -f compose.minio.keycloak.yml restart workspace-user1 workspace-user2
+```
+
+### Option 2: Update realm-export.json (development)
+1. Edit keycloak/realm-export.json
+2. Wipe all data and reimport
+```bash
 docker compose -f compose.minio.keycloak.yml down -v
 docker compose -f compose.minio.keycloak.yml up -d
+```
 
-# 3. Wait for services to be ready (check logs)
+### Option 3: Wait for services to be ready (check logs)
+```bash
 docker compose -f compose.minio.keycloak.yml logs -f keycloak minio
+```
 
-# Keycloak/MinIO not ready during mount
+## 11.3) Keycloak/MinIO not ready during mount
 
 **Symptoms:**
 - mount_minio.sh times out waiting for services
 - Logs show "Keycloak not available after 30 attempts"
 
-**Solutions4) Policy Files Reference
+**Solutions:** Policy Files Reference
 ### Configuration Files
 - [keycloak/realm-export.json](keycloak/realm-export.json) - Keycloak realm, users, roles, and policy mappings
 - [compose.minio.keycloak.yml](compose.minio.keycloak.yml) - Docker Compose with direct port access
@@ -546,6 +548,8 @@ docker compose -f compose.minio.keycloak.yml logs -f keycloak minio
 ### Test Scripts
 - [scripts/test-authz.py](scripts/test-authz.py) - AuthZ-Proxy path-based policy tests
 - [scripts/test-keycloak-minio.py](scripts/test-keycloak-minio.py) - Keycloak-MinIO policy claim tests
+```json
+{
   "Version": "2012-10-17",
   "Statement": [{
     "Effect": "Allow",
@@ -600,21 +604,6 @@ docker compose -f compose.minio.keycloak.yml logs -f keycloak minio
 
 **Note:** These files are **required** and mounted to minio-init container. Do not delete them.
 
-## 15utions:**
-```bash
-# Increase wait timeout in startup/mount_minio.sh
-max_attempts=60  # was: 30
-
-# Check service health
-docker compose -f compose.minio.keycloak.yml ps
-
-# Ensure proper depends_on configuration
-# workspace-user1 should depend on: minio, authz-proxy, keycloak (indirect)
-
-# Restart with verbose logging
-docker compose -f compose.minio.keycloak.yml logs -f workspace-user1
-```
-
 ### Windows Docker Desktop specific issues
 
 **Symptoms:**
@@ -635,7 +624,8 @@ wsl -l -v  # Should show version 2
 # Alternative: Use Docker Desktop with Linux containers
 ```
 
-## 13r compose -f compose.minio.keycloak.yml build
+```
+docker compose -f compose.minio.keycloak.yml build
 docker compose -f compose.minio.keycloak.yml up -d
 ```
 
@@ -711,6 +701,8 @@ docker logs -f workspace-user2
 - Workspace directory empty in file browser
 
 **Solutions:**
+- Check the flow of initialisation.
+- Make sure that the MinIO configuration and Docker image are initialised first before starting the workspaces.
 ```bash
 # Check if symbolic links exist
 docker exec workspace-user1 ls -la /home/kasm-default-profile/Desktop/
